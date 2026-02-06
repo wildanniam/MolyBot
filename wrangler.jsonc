@@ -72,14 +72,25 @@
   },
   // Note: CF_ACCOUNT_ID should be set via `wrangler secret put CF_ACCOUNT_ID`
   // Secrets to configure via `wrangler secret put`:
-  // - ANTHROPIC_API_KEY: Your Anthropic API key
+  //
+  // AI Provider (choose one):
+  // - ANTHROPIC_API_KEY: Your Anthropic API key (for Claude)
+  // - OPENAI_API_KEY: Your OpenAI or z.ai API key (for GPT/GLM models)
+  // - AI_GATEWAY_API_KEY + AI_GATEWAY_BASE_URL: For Cloudflare AI Gateway or z.ai direct
+  //   Example z.ai: AI_GATEWAY_BASE_URL=https://api.z.ai/api/paas/v4
+  //
+  // Authentication & Access:
   // - CF_ACCESS_TEAM_DOMAIN: Cloudflare Access team domain
   // - CF_ACCESS_AUD: Cloudflare Access application audience
+  // - MOLTBOT_GATEWAY_TOKEN: Token to protect gateway access, if unset device pairing will be used
+  //
+  // Chat Channels (optional):
   // - TELEGRAM_BOT_TOKEN: (optional) Telegram bot token
   // - DISCORD_BOT_TOKEN: (optional) Discord bot token
   // - SLACK_BOT_TOKEN: (optional) Slack bot token
   // - SLACK_APP_TOKEN: (optional) Slack app token
-  // - MOLTBOT_GATEWAY_TOKEN: (optional) Token to protect gateway access, if unset device pairing will be used
+  //
+  // Browser Automation (optional):
   // - CDP_SECRET: (optional) Shared secret for /cdp endpoint authentication
   //
   // R2 persistent storage secrets (required for data persistence across sessions):

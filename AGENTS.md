@@ -45,6 +45,9 @@ src/
 
 - `DEV_MODE` - Skips CF Access auth AND bypasses device pairing (maps to `CLAWDBOT_DEV_MODE` for container)
 - `DEBUG_ROUTES` - Enables `/debug/*` routes (disabled by default)
+- `AI_GATEWAY_BASE_URL` - AI provider endpoint (supports Anthropic, OpenAI, z.ai GLM)
+- `OPENAI_API_KEY` - OpenAI or z.ai API key (OpenAI-compatible providers)
+- `ANTHROPIC_API_KEY` - Anthropic API key for Claude
 - See `src/types.ts` for full `MoltbotEnv` interface
 
 ### CLI Commands
@@ -155,7 +158,13 @@ npm run start
 For local development, create `.dev.vars`:
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-...
+# Choose one AI provider:
+ANTHROPIC_API_KEY=sk-ant-...  # For Claude models
+# OR use z.ai GLM (OpenAI-compatible, 95% cheaper):
+OPENAI_API_KEY=zai_...        # Your z.ai API key
+AI_GATEWAY_BASE_URL=https://api.z.ai/api/paas/v4  # z.ai endpoint
+
+# Development flags
 DEV_MODE=true           # Skips CF Access auth + device pairing
 DEBUG_ROUTES=true       # Enables /debug/* routes
 ```
@@ -186,7 +195,9 @@ These are the env vars passed TO the container (internal names):
 
 | Variable | Config Path | Notes |
 |----------|-------------|-------|
-| `ANTHROPIC_API_KEY` | (env var) | Moltbot reads directly from env |
+| `ANTHROPIC_API_KEY` | (env var) | Moltbot reads directly from env (for Claude) |
+| `OPENAI_API_KEY` | (env var) | Moltbot reads directly from env (for OpenAI/z.ai GLM) |
+| `AI_GATEWAY_BASE_URL` | (env var) | Custom provider endpoint (z.ai, Cloudflare AI Gateway, etc.) |
 | `CLAWDBOT_GATEWAY_TOKEN` | `--token` flag | Mapped from `MOLTBOT_GATEWAY_TOKEN` |
 | `CLAWDBOT_DEV_MODE` | `controlUi.allowInsecureAuth` | Mapped from `DEV_MODE` |
 | `TELEGRAM_BOT_TOKEN` | `channels.telegram.botToken` | |

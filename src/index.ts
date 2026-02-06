@@ -11,7 +11,10 @@
  * - Configuration via environment secrets
  *
  * Required secrets (set via `wrangler secret put`):
- * - ANTHROPIC_API_KEY: Your Anthropic API key
+ * - AI Provider (choose one):
+ *   - OPENAI_API_KEY: For OpenAI or z.ai GLM models (OpenAI-compatible)
+ *   - ANTHROPIC_API_KEY: For Claude models
+ *   - AI_GATEWAY_API_KEY + AI_GATEWAY_BASE_URL: For Cloudflare AI Gateway
  *
  * Optional secrets:
  * - MOLTBOT_GATEWAY_TOKEN: Token to protect gateway access
@@ -72,15 +75,16 @@ function validateRequiredEnv(env: MoltbotEnv): string[] {
     }
   }
 
-  // Check for AI Gateway or direct Anthropic configuration
+  // Check for AI provider configuration (at least one must be set)
+  const hasAnyApiKey = env.AI_GATEWAY_API_KEY || env.ANTHROPIC_API_KEY || env.OPENAI_API_KEY;
   if (env.AI_GATEWAY_API_KEY) {
     // AI Gateway requires both API key and base URL
     if (!env.AI_GATEWAY_BASE_URL) {
       missing.push('AI_GATEWAY_BASE_URL (required when using AI_GATEWAY_API_KEY)');
     }
-  } else if (!env.ANTHROPIC_API_KEY) {
-    // Direct Anthropic access requires API key
-    missing.push('ANTHROPIC_API_KEY or AI_GATEWAY_API_KEY');
+  } else if (!hasAnyApiKey) {
+    // At least one provider API key is required
+    missing.push('ANTHROPIC_API_KEY or OPENAI_API_KEY or AI_GATEWAY_API_KEY');
   }
 
   return missing;
@@ -122,6 +126,8 @@ app.use('*', async (c, next) => {
   const redactedSearch = redactSensitiveParams(url);
   console.log(`[REQ] ${c.req.method} ${url.pathname}${redactedSearch}`);
   console.log(`[REQ] Has ANTHROPIC_API_KEY: ${!!c.env.ANTHROPIC_API_KEY}`);
+  console.log(`[REQ] Has OPENAI_API_KEY: ${!!c.env.OPENAI_API_KEY}`);
+  console.log(`[REQ] Has AI_GATEWAY_BASE_URL: ${!!c.env.AI_GATEWAY_BASE_URL}`);
   console.log(`[REQ] DEV_MODE: ${c.env.DEV_MODE}`);
   console.log(`[REQ] DEBUG_ROUTES: ${c.env.DEBUG_ROUTES}`);
   await next();
@@ -255,8 +261,8 @@ app.all('*', async (c) => {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
     let hint = 'Check worker logs with: wrangler tail';
-    if (!c.env.ANTHROPIC_API_KEY) {
-      hint = 'ANTHROPIC_API_KEY is not set. Run: wrangler secret put ANTHROPIC_API_KEY';
+    if (!c.env.ANTHROPIC_API_KEY && !c.env.OPENAI_API_KEY && !c.env.AI_GATEWAY_API_KEY) {
+      hint = 'AI provider API key is not set. Run: wrangler secret put OPENAI_API_KEY (for z.ai/OpenAI) or ANTHROPIC_API_KEY (for Claude)';
     } else if (errorMessage.includes('heap out of memory') || errorMessage.includes('OOM')) {
       hint = 'Gateway ran out of memory. Try again or check for memory leaks.';
     }

@@ -1,10 +1,11 @@
 #!/bin/bash
 # Startup script for Moltbot in Cloudflare Sandbox
 # This script:
-# 1. Restores config from R2 backup if available
-# 2. Configures moltbot from environment variables
-# 3. Starts a background sync to backup config to R2
-# 4. Starts the gateway
+# 1. Repairs clawdbot installation if corrupt
+# 2. Kills stale processes from previous runs
+# 3. Restores config from R2 backup if available
+# 4. Configures moltbot from environment variables
+# 5. Starts the gateway
 
 set -e
 
@@ -14,6 +15,37 @@ if pgrep -f "clawdbot gateway" > /dev/null 2>&1; then
     echo "Moltbot gateway is already running, exiting."
     exit 0
 fi
+
+# ============================================================
+# REPAIR: Check and fix clawdbot installation
+# ============================================================
+# The auto-update feature can corrupt the installation by running
+# `npm i -g clawdbot@latest` which fails on Cloudflare Sandbox filesystem.
+# If clawdbot is broken, reinstall the pinned version from the Docker image.
+CLAWDBOT_PINNED_VERSION="2026.1.24-3"
+
+if ! clawdbot --version > /dev/null 2>&1; then
+    echo "WARNING: clawdbot installation is corrupt! Reinstalling v${CLAWDBOT_PINNED_VERSION}..."
+    # Kill any stale npm/node processes that might interfere
+    pkill -f "npm" 2>/dev/null || true
+    pkill -f "clawdbot" 2>/dev/null || true
+    sleep 1
+    # Clean up broken installation
+    rm -rf /usr/local/lib/node_modules/clawdbot 2>/dev/null || true
+    rm -f /usr/local/bin/clawdbot 2>/dev/null || true
+    # Reinstall pinned version
+    npm install -g "clawdbot@${CLAWDBOT_PINNED_VERSION}" --no-optional 2>&1 || {
+        echo "FATAL: Failed to reinstall clawdbot"
+        exit 1
+    }
+    echo "clawdbot reinstalled successfully: $(clawdbot --version)"
+else
+    echo "clawdbot OK: $(clawdbot --version 2>&1)"
+fi
+
+# Kill any stale npm/node processes from previous auto-update attempts
+pkill -f "npm i -g clawdbot" 2>/dev/null || true
+pkill -f "npm install -g clawdbot" 2>/dev/null || true
 
 # Paths (clawdbot paths are used internally - upstream hasn't renamed yet)
 CONFIG_DIR="/root/.clawdbot"
@@ -133,7 +165,7 @@ fi
 # ============================================================
 # UPDATE CONFIG FROM ENVIRONMENT VARIABLES
 # ============================================================
-node << EOFNODE
+node << 'EOFNODE'
 const fs = require('fs');
 
 const configPath = '/root/.clawdbot/clawdbot.json';
@@ -222,14 +254,104 @@ if (process.env.SLACK_BOT_TOKEN && process.env.SLACK_APP_TOKEN) {
     config.channels.slack.enabled = true;
 }
 
-// Base URL override (e.g., for Cloudflare AI Gateway)
+// Base URL override (e.g., for Cloudflare AI Gateway, z.ai GLM)
 // Usage: Set AI_GATEWAY_BASE_URL or ANTHROPIC_BASE_URL to your endpoint like:
 //   https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/anthropic
 //   https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/openai
+//   https://api.z.ai/api/paas/v4 (z.ai GLM - general purpose)
+//   https://api.z.ai/api/coding/paas/v4 (z.ai GLM - coding plan)
 const baseUrl = (process.env.AI_GATEWAY_BASE_URL || process.env.ANTHROPIC_BASE_URL || '').replace(/\/+$/, '');
 const isOpenAI = baseUrl.endsWith('/openai');
+const isZAI = baseUrl.includes('api.z.ai');
 
-if (isOpenAI) {
+if (isZAI) {
+    // Configure z.ai as a custom OpenAI-compatible provider
+    // We use custom config instead of built-in 'zai' provider because:
+    // 1. User may have coding plan (different base URL)
+    // 2. Need explicit API key in provider config
+    // 3. Need to specify exact model (glm-4.7-flash for coding plan)
+    // Ref: https://haimaker.ai/blog/posts/integrating-custom-llm-providers-with-clawdbot
+    const zaiApiKey = process.env.ZAI_API_KEY || process.env.OPENAI_API_KEY || '';
+    console.log('Configuring z.ai GLM custom provider with base URL:', baseUrl);
+    console.log('ZAI API key present:', !!zaiApiKey);
+
+    config.models = config.models || {};
+    config.models.mode = 'merge';
+    config.models.providers = config.models.providers || {};
+    config.models.providers.zai = {
+        baseUrl: baseUrl,
+        apiKey: zaiApiKey,
+        api: 'openai-completions',
+        models: [
+            {
+                id: 'glm-4.7-flash',
+                name: 'GLM-4.7-Flash',
+                reasoning: true,
+                input: ['text'],
+                cost: { input: 0.07, output: 0.40, cacheRead: 0, cacheWrite: 0 },
+                contextWindow: 200000,
+                maxTokens: 32000
+            },
+            {
+                id: 'glm-4.7',
+                name: 'GLM-4.7',
+                reasoning: true,
+                input: ['text'],
+                cost: { input: 0.40, output: 1.50, cacheRead: 0, cacheWrite: 0 },
+                contextWindow: 200000,
+                maxTokens: 32000
+            },
+            {
+                id: 'glm-4.6',
+                name: 'GLM-4.6',
+                reasoning: true,
+                input: ['text'],
+                cost: { input: 0.35, output: 1.50, cacheRead: 0, cacheWrite: 0 },
+                contextWindow: 202000,
+                maxTokens: 32000
+            },
+            {
+                id: 'glm-4.5',
+                name: 'GLM-4.5',
+                reasoning: true,
+                input: ['text'],
+                cost: { input: 0.05, output: 0.22, cacheRead: 0, cacheWrite: 0 },
+                contextWindow: 131000,
+                maxTokens: 16000
+            },
+            {
+                id: 'glm-4.5-air',
+                name: 'GLM-4.5-Air',
+                reasoning: true,
+                input: ['text'],
+                cost: { input: 0.01, output: 0.05, cacheRead: 0, cacheWrite: 0 },
+                contextWindow: 131000,
+                maxTokens: 16000
+            },
+            {
+                id: 'glm-4.6v',
+                name: 'GLM-4.6V (Vision)',
+                reasoning: true,
+                input: ['text', 'image'],
+                cost: { input: 0.35, output: 1.50, cacheRead: 0, cacheWrite: 0 },
+                contextWindow: 202000,
+                maxTokens: 32000
+            }
+        ]
+    };
+
+    // Allowlist models
+    config.agents.defaults.models = config.agents.defaults.models || {};
+    config.agents.defaults.models['zai/glm-4.7-flash'] = { alias: 'GLM-4.7-Flash' };
+    config.agents.defaults.models['zai/glm-4.7'] = { alias: 'GLM-4.7' };
+    config.agents.defaults.models['zai/glm-4.6'] = { alias: 'GLM-4.6' };
+    config.agents.defaults.models['zai/glm-4.6v'] = { alias: 'GLM-4.6V' };
+    config.agents.defaults.models['zai/glm-4.5'] = { alias: 'GLM-4.5' };
+    config.agents.defaults.models['zai/glm-4.5-air'] = { alias: 'GLM-4.5-Air' };
+
+    // Default to glm-4.7-flash (works with coding plan, best for agentic AI)
+    config.agents.defaults.model.primary = 'zai/glm-4.7-flash';
+} else if (isOpenAI) {
     // Create custom openai provider config with baseUrl override
     // Omit apiKey so moltbot falls back to OPENAI_API_KEY env var
     console.log('Configuring OpenAI provider with base URL:', baseUrl);
@@ -237,7 +359,7 @@ if (isOpenAI) {
     config.models.providers = config.models.providers || {};
     config.models.providers.openai = {
         baseUrl: baseUrl,
-        api: 'openai-responses',
+        api: 'openai-completions',  // CRITICAL: Must be 'openai-completions' for custom providers
         models: [
             { id: 'gpt-5.2', name: 'GPT-5.2', contextWindow: 200000 },
             { id: 'gpt-5', name: 'GPT-5', contextWindow: 200000 },
@@ -277,6 +399,21 @@ if (isOpenAI) {
 } else {
     // Default to Anthropic without custom base URL (uses built-in pi-ai catalog)
     config.agents.defaults.model.primary = 'anthropic/claude-opus-4-5';
+}
+
+// Remove any unknown config keys that clawdbot doesn't recognize
+// (these cause "Config invalid" errors and prevent gateway from starting)
+delete config.updates;
+
+// Clean up stale env overrides from R2 backup (prevents old/wrong values from persisting)
+if (config.env) {
+    delete config.env.ZAI_API_KEY;
+    delete config.env.OPENAI_API_KEY;
+    delete config.env.ANTHROPIC_API_KEY;
+    // Clean up empty env object
+    if (Object.keys(config.env).length === 0) {
+        delete config.env;
+    }
 }
 
 // Write updated config

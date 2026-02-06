@@ -11,7 +11,11 @@ Run [OpenClaw](https://github.com/openclaw/openclaw) (formerly Moltbot, formerly
 ## Requirements
 
 - [Workers Paid plan](https://www.cloudflare.com/plans/developer-platform/) ($5 USD/month) — required for Cloudflare Sandbox containers
-- [Anthropic API key](https://console.anthropic.com/) — for Claude access, or you can use AI Gateway's [Unified Billing](https://developers.cloudflare.com/ai-gateway/features/unified-billing/)
+- AI Provider API key (choose one):
+  - [Anthropic API key](https://console.anthropic.com/) — for Claude access
+  - [z.ai API key](https://z.ai/) — for GLM models (cheaper alternative, OpenAI-compatible)
+  - [OpenAI API key](https://platform.openai.com/) — for GPT models
+  - Or use AI Gateway's [Unified Billing](https://developers.cloudflare.com/ai-gateway/features/unified-billing/)
 
 The following Cloudflare features used by this project have free tiers:
 - Cloudflare Access (authentication)
@@ -36,6 +40,8 @@ This project packages OpenClaw to run in a [Cloudflare Sandbox](https://develope
 ![moltworker architecture](./assets/architecture.png)
 
 ## Quick Start
+
+> 💡 **Using z.ai GLM?** Check out the [z.ai Deployment Guide](./DEPLOYMENT_ZAI.md) for complete step-by-step instructions (95% cheaper than Claude!).
 
 _Cloudflare Sandboxes are available on the [Workers Paid plan](https://dash.cloudflare.com/?to=/:account/workers/plans)._
 
@@ -75,6 +81,35 @@ Replace `your-worker` with your actual worker subdomain and `YOUR_GATEWAY_TOKEN`
 > 2. [Pair your device](#device-pairing) via the admin UI at `/_admin/`
 
 You'll also likely want to [enable R2 storage](#persistent-storage-r2) so your paired devices and conversation history persist across container restarts (optional but recommended).
+
+### Alternative: Using z.ai GLM Models (95% Cheaper!)
+
+Instead of Claude, you can use [z.ai's GLM models](https://z.ai/) which are OpenAI-compatible and significantly cheaper:
+
+```bash
+# Set your z.ai API key as OPENAI_API_KEY
+npx wrangler secret put OPENAI_API_KEY
+# Enter: your z.ai API key
+
+# Set z.ai base URL
+npx wrangler secret put AI_GATEWAY_BASE_URL
+# Enter: https://api.z.ai/api/paas/v4
+# Or for coding plan: https://api.z.ai/api/coding/paas/v4
+
+# Deploy
+npm run deploy
+```
+
+**Available GLM Models:**
+- **GLM-4.7-Flash** (default) — $0.07/$0.40 per M tokens — Optimized for agentic AI, tool use, long-horizon planning
+- **GLM-4.7** — $0.40/$1.50 per M tokens — Best reasoning, complex coding, premium performance
+- **GLM-4.6** — $0.35/$1.50 per M tokens — Proven reliability
+- **GLM-4.5-Air** — $0.05/$0.22 per M tokens — Budget-friendly for lighter tasks
+
+**Cost Comparison:**
+- Claude Opus 4: ~$15/$75 per M tokens
+- GLM-4.7-Flash: $0.07/$0.40 per M tokens
+- **Savings: ~95%!** 💰
 
 ## Setting Up the Admin UI
 
@@ -328,7 +363,7 @@ See `skills/cloudflare-browser/SKILL.md` for full documentation.
 
 ## Optional: Cloudflare AI Gateway
 
-You can route API requests through [Cloudflare AI Gateway](https://developers.cloudflare.com/ai-gateway/) for caching, rate limiting, analytics, and cost tracking. AI Gateway supports multiple providers — configure your preferred provider in the gateway and use these env vars:
+You can route API requests through [Cloudflare AI Gateway](https://developers.cloudflare.com/ai-gateway/) for caching, rate limiting, analytics, and cost tracking. AI Gateway supports multiple providers (Anthropic, OpenAI, z.ai GLM, etc.) — configure your preferred provider in the gateway and use these env vars:
 
 ### Setup
 
@@ -360,10 +395,10 @@ The `AI_GATEWAY_*` variables take precedence over `ANTHROPIC_*` if both are set.
 | Secret | Required | Description |
 |--------|----------|-------------|
 | `AI_GATEWAY_API_KEY` | Yes* | API key for your AI Gateway provider (requires `AI_GATEWAY_BASE_URL`) |
-| `AI_GATEWAY_BASE_URL` | Yes* | AI Gateway endpoint URL (required when using `AI_GATEWAY_API_KEY`) |
+| `AI_GATEWAY_BASE_URL` | Yes* | AI Gateway endpoint URL or direct provider URL (e.g., `https://api.z.ai/api/paas/v4`) |
 | `ANTHROPIC_API_KEY` | Yes* | Direct Anthropic API key (fallback if AI Gateway not configured) |
 | `ANTHROPIC_BASE_URL` | No | Direct Anthropic API base URL (fallback) |
-| `OPENAI_API_KEY` | No | OpenAI API key (alternative provider) |
+| `OPENAI_API_KEY` | No | OpenAI or z.ai API key (alternative provider, OpenAI-compatible) |
 | `CF_ACCESS_TEAM_DOMAIN` | Yes* | Cloudflare Access team domain (required for admin UI) |
 | `CF_ACCESS_AUD` | Yes* | Cloudflare Access application audience (required for admin UI) |
 | `MOLTBOT_GATEWAY_TOKEN` | Yes | Gateway token for authentication (pass via `?token=` query param) |

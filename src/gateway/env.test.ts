@@ -170,4 +170,48 @@ describe('buildEnvVars', () => {
     expect(result.OPENAI_BASE_URL).toBe('https://gateway.ai.cloudflare.com/v1/123/my-gw/openai');
     expect(result.AI_GATEWAY_BASE_URL).toBe('https://gateway.ai.cloudflare.com/v1/123/my-gw/openai');
   });
+
+  it('maps AI_GATEWAY_API_KEY to ZAI_API_KEY for z.ai GLM provider (built-in)', () => {
+    const env = createMockEnv({
+      AI_GATEWAY_API_KEY: 'zai_test_key',
+      AI_GATEWAY_BASE_URL: 'https://api.z.ai/api/paas/v4',
+    });
+    const result = buildEnvVars(env);
+    expect(result.ZAI_API_KEY).toBe('zai_test_key');
+    expect(result.AI_GATEWAY_BASE_URL).toBe('https://api.z.ai/api/paas/v4');
+    expect(result.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(result.OPENAI_API_KEY).toBeUndefined();
+  });
+
+  it('maps AI_GATEWAY_API_KEY to ZAI_API_KEY for z.ai GLM Coding Plan', () => {
+    const env = createMockEnv({
+      AI_GATEWAY_API_KEY: 'zai_test_key',
+      AI_GATEWAY_BASE_URL: 'https://api.z.ai/api/coding/paas/v4',
+    });
+    const result = buildEnvVars(env);
+    expect(result.ZAI_API_KEY).toBe('zai_test_key');
+    expect(result.AI_GATEWAY_BASE_URL).toBe('https://api.z.ai/api/coding/paas/v4');
+    expect(result.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(result.OPENAI_API_KEY).toBeUndefined();
+  });
+
+  it('maps OPENAI_API_KEY to ZAI_API_KEY when z.ai URL is set', () => {
+    const env = createMockEnv({
+      OPENAI_API_KEY: 'zai_test_key',
+      AI_GATEWAY_BASE_URL: 'https://api.z.ai/api/paas/v4',
+    });
+    const result = buildEnvVars(env);
+    expect(result.ZAI_API_KEY).toBe('zai_test_key');
+    expect(result.AI_GATEWAY_BASE_URL).toBe('https://api.z.ai/api/paas/v4');
+  });
+
+  it('handles z.ai URL with trailing slashes', () => {
+    const env = createMockEnv({
+      AI_GATEWAY_API_KEY: 'zai_test_key',
+      AI_GATEWAY_BASE_URL: 'https://api.z.ai/api/paas/v4///',
+    });
+    const result = buildEnvVars(env);
+    expect(result.ZAI_API_KEY).toBe('zai_test_key');
+    expect(result.AI_GATEWAY_BASE_URL).toBe('https://api.z.ai/api/paas/v4');
+  });
 });
