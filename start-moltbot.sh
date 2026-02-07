@@ -401,6 +401,20 @@ if (isZAI) {
     config.agents.defaults.model.primary = 'anthropic/claude-opus-4-5';
 }
 
+// Brave Search: enables built-in web_search tool + brave-search skill (key from env BRAVE_API_KEY only)
+if (process.env.BRAVE_API_KEY) {
+    config.tools = config.tools || {};
+    config.tools.web = config.tools.web || {};
+    config.tools.web.search = {
+        enabled: true,
+        provider: 'brave',
+        maxResults: 5,
+        timeoutSeconds: 30
+    };
+    // Gateway reads apiKey from env BRAVE_API_KEY - do not store in config (R2 backup)
+    console.log('Brave Search (web_search) configured, key from env');
+}
+
 // Remove any unknown config keys that clawdbot doesn't recognize
 // (these cause "Config invalid" errors and prevent gateway from starting)
 delete config.updates;

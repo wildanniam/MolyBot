@@ -90,6 +90,9 @@
   // - SLACK_BOT_TOKEN: (optional) Slack bot token
   // - SLACK_APP_TOKEN: (optional) Slack app token
   //
+  // Web Search (optional): for web_search tool + brave-search skill
+  // - BRAVE_API_KEY: (optional) Brave Search API key (Data for Search plan at brave.com/search/api)
+  //
   // Browser Automation (optional):
   // - CDP_SECRET: (optional) Shared secret for /cdp endpoint authentication
   //

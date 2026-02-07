@@ -280,6 +280,8 @@ Debug endpoints are available at `/debug/*` when enabled (requires `DEBUG_ROUTES
 
 ### Telegram
 
+Panduan lengkap (BotFather, secret, pairing): **[docs/TELEGRAM_SETUP.md](docs/TELEGRAM_SETUP.md)**.
+
 ```bash
 npx wrangler secret put TELEGRAM_BOT_TOKEN
 npm run deploy
@@ -291,6 +293,20 @@ npm run deploy
 npx wrangler secret put DISCORD_BOT_TOKEN
 npm run deploy
 ```
+
+### Brave Search (web search + brave-search skill)
+
+Agar bot bisa pakai **web search** (mis. cari berita Bitcoin, harga, dll.) dan skill **brave-search**:
+
+1. Daftar di [Brave Search API](https://brave.com/search/api/), pilih plan **"Data for Search"** (bukan "Data for AI").
+2. Set secret lalu deploy:
+
+```bash
+npx wrangler secret put BRAVE_API_KEY
+npm run deploy
+```
+
+Setelah itu **restart gateway** sekali dari Admin UI (Gateway Controls → Restart Gateway) supaya config terbaca. Bot bisa pakai `web_search` dan skill brave-search.
 
 ### Slack
 
@@ -410,6 +426,7 @@ The `AI_GATEWAY_*` variables take precedence over `ANTHROPIC_*` if both are set.
 | `CF_ACCOUNT_ID` | No | Cloudflare account ID (required for R2 storage) |
 | `TELEGRAM_BOT_TOKEN` | No | Telegram bot token |
 | `TELEGRAM_DM_POLICY` | No | Telegram DM policy: `pairing` (default) or `open` |
+| `BRAVE_API_KEY` | No | Brave Search API key (untuk web_search + brave-search skill) |
 | `DISCORD_BOT_TOKEN` | No | Discord bot token |
 | `DISCORD_DM_POLICY` | No | Discord DM policy: `pairing` (default) or `open` |
 | `SLACK_BOT_TOKEN` | No | Slack bot token |

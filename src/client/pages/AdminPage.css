@@ -161,6 +161,62 @@
   color: var(--text-muted);
 }
 
+/* Channel pairing by code (Telegram / WhatsApp) */
+.pairing-by-code-section .hint {
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.pairing-by-code-section .hint code {
+  background: var(--bg-color);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.pairing-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.pairing-channel-select {
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border-color);
+  background: var(--bg-color);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.pairing-code-input {
+  padding: 0.5rem 0.75rem;
+  width: 12rem;
+  max-width: 100%;
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border-color);
+  background: var(--bg-color);
+  color: var(--text-primary);
+  font-size: 1rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.pairing-success {
+  margin-top: 0.75rem;
+  color: var(--success-color);
+  font-size: 0.9rem;
+}
+
+.pairing-error {
+  margin-top: 0.75rem;
+  color: var(--error-color);
+  font-size: 0.9rem;
+  white-space: pre-line;
+}
+
 /* Empty state */
 .empty-state {
   text-align: center;

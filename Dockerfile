@@ -35,7 +35,7 @@ RUN mkdir -p /root/.clawdbot \
 # Copy startup script
 # IMPORTANT: When modifying start-moltbot.sh, also bump this version to bust Docker cache
 # Docker caches RUN commands by their text, not output - so change the string itself
-ARG BUILD_VERSION=v35-remove-updates-key-2026-02-06
+ARG BUILD_VERSION=v36-brave-search-2026-02-07
 RUN echo "build-version: ${BUILD_VERSION}" > /tmp/.build-version
 COPY start-moltbot.sh /usr/local/bin/start-moltbot.sh
 RUN chmod +x /usr/local/bin/start-moltbot.sh

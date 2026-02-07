@@ -289,6 +289,257 @@ Bandingkan dengan Claude:
 4. **Gunakan device pairing** (default, recommended)
 5. **Set WORKER_URL** kalau mau pake CDP browser automation
 
+---
+
+## ⚠️ Troubleshooting & Common Pitfalls
+
+### Issue 1: "ANTHROPIC_API_KEY required" padahal sudah set OPENAI_API_KEY
+
+**Gejala:**  
+Worker error `"ANTHROPIC_API_KEY or AI_GATEWAY_API_KEY required"` meskipun sudah set `OPENAI_API_KEY` untuk z.ai GLM.
+
+**Root cause:**  
+Validasi env di `src/index.ts` hanya mengecek `ANTHROPIC_API_KEY` dan `AI_GATEWAY_API_KEY`, tidak tahu bahwa `OPENAI_API_KEY` juga valid untuk provider lain.
+
+**Solved (sudah diperbaiki di kode ini):**  
+Validasi sekarang cek: `const hasAnyApiKey = env.AI_GATEWAY_API_KEY || env.ANTHROPIC_API_KEY || env.OPENAI_API_KEY;`
+
+**Pencegahan:**  
+- Pastikan sudah deploy versi terbaru dari repo ini.
+- Set minimal **satu** dari: `OPENAI_API_KEY` (z.ai), `ANTHROPIC_API_KEY` (Claude), atau `AI_GATEWAY_API_KEY` + `AI_GATEWAY_BASE_URL` (AI Gateway).
+
+---
+
+### Issue 2: Docker Cache – Perubahan Kode Tidak Deploy
+
+**Gejala:**  
+- Edit `start-moltbot.sh`, jalankan `npm run deploy`, tapi bot masih pakai kode lama.
+- Build context size besar (280 MB+) padahal seharusnya kecil.
+
+**Root cause:**  
+Docker cache `COPY` step berdasarkan **teks command**, bukan isi file. Jadi `COPY start-moltbot.sh /usr/local/bin/` di-cache meskipun file berubah. Image Docker tidak rebuild sampai cache di-bust.
+
+**Solved:**  
+1. **Bump `BUILD_VERSION`** di `Dockerfile`:
+   ```dockerfile
+   ARG BUILD_VERSION=v36-brave-search-2026-02-07
+   ```
+   Setiap edit `start-moltbot.sh`, naikkan versi (v36 → v37, dst.).
+
+2. **Clear Docker cache** (sekali):
+   ```bash
+   docker builder prune -af
+   ```
+
+3. **Deploy ulang**:
+   ```bash
+   npm run deploy
+   ```
+
+**Pencegahan:**  
+- **Selalu bump `BUILD_VERSION`** di Dockerfile saat edit `start-moltbot.sh`, `moltbot.json.template`, atau file lain yang di-COPY.
+- Jalankan `docker builder prune -af` sekali setelah beberapa deploy kalau build context size membesar.
+
+---
+
+### Issue 3: API Key Berisi Literal Command String
+
+**Gejala:**  
+Bot tidak merespons. Raw JSON config di gateway menunjukkan:
+```json
+"apiKey": "npx wrangler secret put OPENAI_API_KEY"
+```
+(literal string command, bukan API key asli).
+
+**Root cause:**  
+Saat `wrangler secret put OPENAI_API_KEY` minta input, user **paste instruksi command** (bukan nilai API key). Jadi gateway dapat string `"npx wrangler secret put OPENAI_API_KEY"` sebagai "API key" → API call gagal autentikasi → bot diam.
+
+**Solved:**  
+Re-set secret dengan **nilai API key asli**:
+```bash
+npx wrangler secret put OPENAI_API_KEY
+# Paste: sk-... atau token z.ai yang benar (BUKAN teks command)
+```
+
+**Pencegahan:**  
+- Saat `wrangler secret put` minta `Enter a secret value:`, paste **nilai secret** (API key, token).
+- **Jangan** paste teks command/instruksi.
+- Verifikasi: cek raw JSON config di gateway → pastikan `apiKey` berisi string yang panjang (40+ karakter), bukan command.
+
+---
+
+### Issue 4: Auto-update Corrupt Moltbot Installation
+
+**Gejala:**  
+- UI menampilkan error `GatewayRestart`.
+- Log: `npm i -g clawdbot@latest` gagal dengan `ENOTEMPTY`, lalu `Error: ENOENT: no such file or directory, open '/usr/local/lib/node_modules/clawdbot/package.json'`.
+- Gateway crash; bot tidak bisa start.
+
+**Root cause:**  
+Moltbot punya **fitur auto-update** (`config.updates.enabled` default true) yang coba `npm i -g clawdbot@latest`. Di Cloudflare Sandbox persistent, npm **gagal hapus `node_modules`** (filesystem restrictions), instalasi `clawdbot` di `/usr/local/lib/node_modules/clawdbot` rusak (package.json hilang). Binary corrupt → gateway tidak bisa start.
+
+**Solved (sudah diperbaiki di `start-moltbot.sh`):**  
+1. **Disable auto-update**:
+   ```js
+   delete config.updates; // Versi pinned tidak kenal key ini
+   ```
+
+2. **Repair logic** (auto-reinstall kalau corrupt):
+   ```bash
+   if ! clawdbot --version > /dev/null 2>&1; then
+       echo "clawdbot corrupt, reinstalling..."
+       pkill -f "npm" || true
+       pkill -f "clawdbot" || true
+       rm -rf /usr/local/lib/node_modules/clawdbot
+       npm install -g "clawdbot@${CLAWDBOT_PINNED_VERSION}"
+   fi
+   ```
+
+3. **Kill stale npm processes**:
+   ```bash
+   pkill -f "npm i -g clawdbot" || true
+   ```
+
+**Pencegahan:**  
+- **Jangan aktifkan auto-update** di sandbox persistent.
+- Pin versi di Dockerfile: `npm install -g clawdbot@2026.1.24-3`.
+- Repair logic (sudah ada di `start-moltbot.sh`) akan otomatis perbaiki kalau corrupt.
+
+---
+
+### Issue 5: SyntaxError di Node Heredoc (npm Output Leak)
+
+**Gejala:**  
+Log: `SyntaxError: Unexpected number` di `[stdin]:238` saat jalankan Node.js block di `start-moltbot.sh`.
+
+**Root cause:**  
+Heredoc delimiter tidak di-quote: `node << EOFNODE` (harusnya `node << 'EOFNODE'`). Bash melakukan **variable expansion**, dan **output npm** dari proses lain (mis. `changed 654 packages in 33s`) bocor ke stdin Node → Node coba parse sebagai kode JavaScript → syntax error.
+
+**Solved (sudah diperbaiki):**  
+Quote delimiter heredoc:
+```bash
+node << 'EOFNODE'
+...
+EOFNODE
+```
+
+**Pencegahan:**  
+- Pakai **quoted heredoc** (`<< 'EOF'`) kalau isi heredoc adalah kode literal (JavaScript, Python, config, dsb.).
+- Unquoted heredoc (`<< EOF`) hanya untuk konten yang **memang perlu** bash expansion (mis. heredoc dengan `$VAR` yang valid).
+
+---
+
+### Issue 6: R2 Backup Perpetuates Broken State
+
+**Gejala:**  
+- Deploy ulang dengan kode fix, tapi bot masih pakai config **lama** (yang rusak).
+- Restore dari R2 membawa kembali state corrupt.
+
+**Root cause:**  
+`start-moltbot.sh` restore config dari R2 (`/data/moltbot/clawdbot/clawdbot.json` → `/root/.clawdbot/clawdbot.json`). Kalau config di R2 rusak (punya API key salah, punya key `updates` yang tidak dikenal versi pinned, dsb.), setiap container restart akan restore config rusak itu.
+
+**Solved:**  
+**Clear R2 backup** untuk fresh start:
+```bash
+npx wrangler r2 object delete moltbot-data/clawdbot/clawdbot.json --remote
+npx wrangler r2 object delete moltbot-data/.last-sync --remote
+npm run deploy
+```
+
+Setelah hapus backup, container start dengan config **dari template** (bersih).
+
+**Pencegahan:**  
+- Kalau ada masalah **persistent yang tidak hilang** meskipun kode sudah fix, cek R2:
+  ```bash
+  npx wrangler r2 object list moltbot-data --remote
+  ```
+- Hapus `clawdbot/clawdbot.json` dan `.last-sync` kalau perlu fresh start.
+- **Jangan hapus seluruh R2** (`rm -rf /data/moltbot/*` di container) karena mount itu **adalah** bucket R2; hapus akan delete data backup permanen.
+
+---
+
+### Issue 7: Gateway Tidak Pakai Secret Baru (Perlu Restart)
+
+**Gejala:**  
+- Set secret baru (mis. `TELEGRAM_BOT_TOKEN`, `BRAVE_API_KEY`), deploy ulang, tapi gateway tidak pakai secret itu (channel tidak jalan, API key not found).
+
+**Root cause:**  
+Gateway **proses** yang sudah jalan di container dapat env dari saat proses itu **start**. Container Cloudflare Sandbox bisa **stay alive** (`keepAlive: true`), jadi proses gateway bisa jalan berjam-jam. Kalau kamu set secret baru setelah gateway start, proses lama tidak dapat env terbaru.
+
+**Solved:**  
+**Restart gateway** dari Admin UI:
+1. Buka `https://moltbot-sandbox.wildanniam4.workers.dev/_admin/`
+2. Klik **"Restart Gateway"** (di bagian Gateway Controls).
+3. Tunggu 20–30 detik sampai gateway start ulang.
+
+Proses baru akan dapat `c.env` terbaru (Cloudflare inject secrets at request time), dan channel/API key baru akan aktif.
+
+**Pencegahan:**  
+- Setelah set **secret baru** (`wrangler secret put ...`), **selalu restart gateway** (dari Admin UI atau deploy ulang).
+- Deploy ulang (`npm run deploy`) juga bisa restart gateway kalau ada perubahan kode; tapi kalau **hanya ganti secret** (tanpa ubah kode), cukup restart gateway saja (lebih cepat).
+
+---
+
+### Issue 8: "Channel config schema unavailable" di Dashboard
+
+**Gejala:**  
+- Halaman "Channels" di gateway dashboard menunjukkan error merah: **"Channel config schema unavailable"**.
+- WhatsApp/Telegram/Discord tampil "n/a" atau error.
+
+**Root cause:**  
+Worker sempat mount API admin di `/api/*`, bentrok dengan gateway's `/api/...` (untuk schema/config channel). Request dari dashboard ke `/api/channels/schema` ditangkap worker → 404/error.
+
+**Solved (sudah diperbaiki di kode ini):**  
+Pindahkan API admin worker dari `/api/*` → `/_admin/api/*`:
+```typescript
+app.route('/_admin/api', api); // bukan app.route('/api', api)
+```
+
+Client juga update: `const API_BASE = '/_admin/api/admin';`
+
+**Pencegahan:**  
+- **Jangan** mount route worker di `/api/*` (reserved untuk gateway).
+- Kalau mau tambah API admin, pakai prefix `/_admin/api/*` atau `/worker-api/*`.
+
+---
+
+### Issue 9: Pairing Telegram – "unknown option '--url'"
+
+**Gejala:**  
+Error di Admin UI saat approve pairing Telegram: `"error: unknown option '--url'"`.
+
+**Root cause:**  
+Subcommand `clawdbot pairing` **tidak punya opsi `--url`** (beda dengan `clawdbot devices` yang punya). Kode awalnya pakai `clawdbot pairing approve telegram 3898T8EK --url ws://...` → CLI reject.
+
+**Solved (sudah diperbaiki):**  
+Hapus `--url` dari perintah pairing:
+```bash
+clawdbot pairing approve telegram 3898T8EK
+# (bukan: ... --url ws://localhost:18789)
+```
+
+CLI jalan di container yang sama dengan gateway; CLI baca config dari `/root/.clawdbot` (default) dan otomatis connect ke gateway lokal.
+
+**Pencegahan:**  
+- Pakai `--url` **hanya** untuk subcommand `devices` (mis. `clawdbot devices list --url ws://...`).
+- Subcommand **`pairing`, `channels`, `models`** tidak butuh `--url`.
+
+---
+
+## 📋 Checklist Deployment Anti-Gagal
+
+Untuk mencegah masalah di atas, ikuti checklist ini setiap deploy perubahan besar:
+
+- [ ] **Edit `start-moltbot.sh`?** → Bump `BUILD_VERSION` di Dockerfile + `docker builder prune -af`.
+- [ ] **Set secret baru?** → `wrangler secret put ...` + **paste nilai asli** (bukan command) + deploy + **restart gateway**.
+- [ ] **Ganti provider AI?** → Set secret + bump Dockerfile + deploy + verify raw JSON config (`apiKey` berisi string panjang, bukan command).
+- [ ] **Deploy gagal/stuck?** → `docker builder prune -af` + `npm run deploy` ulang.
+- [ ] **Bot tidak jawab meskipun kode fix?** → Cek R2: `wrangler r2 object list moltbot-data --remote`; hapus `.last-sync` + `clawdbot/clawdbot.json` kalau perlu fresh start.
+- [ ] **Channel baru (Telegram/Discord)?** → Set token + deploy + **restart gateway** + approve pairing di Admin UI.
+- [ ] **Test ulang setelah fix?** → Restart gateway + hard refresh browser (`Cmd+Shift+R`) + kirim pesan test di channel.
+
+---
+
 ## 🆘 Butuh Bantuan?
 
 - [OpenClaw Documentation](https://docs.openclaw.ai/)

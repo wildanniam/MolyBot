@@ -205,8 +205,15 @@ app.use('*', async (c, next) => {
   return middleware(c, next);
 });
 
-// Mount API routes (protected by Cloudflare Access)
-app.route('/api', api);
+// Mount Admin API routes (protected by Cloudflare Access)
+//
+// IMPORTANT:
+// The Moltbot gateway dashboard uses `/api/*` paths for its own backend.
+// If we mount our worker API at `/api`, we intercept those requests and break
+// gateway features like Channels (schema/config), WhatsApp web login, etc.
+//
+// So we mount the worker admin API under `/_admin/api/*` instead.
+app.route('/_admin/api', api);
 
 // Mount Admin UI routes (protected by Cloudflare Access)
 app.route('/_admin', adminUi);

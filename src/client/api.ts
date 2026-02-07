@@ -1,7 +1,7 @@
 // API client for admin endpoints
 // Authentication is handled by Cloudflare Access (JWT in cookies)
 
-const API_BASE = '/api/admin';
+const API_BASE = '/_admin/api/admin';
 
 export interface PendingDevice {
   requestId: string;
@@ -138,5 +138,34 @@ export interface SyncResponse {
 export async function triggerSync(): Promise<SyncResponse> {
   return apiRequest<SyncResponse>('/storage/sync', {
     method: 'POST',
+  });
+}
+
+// Channel pairing (Telegram / WhatsApp) - approve by code from bot message
+export interface PairingListResponse {
+  channel: string;
+  raw: string;
+  stderr?: string;
+  error?: string;
+}
+
+export async function getPairingList(channel: 'telegram' | 'whatsapp' = 'telegram'): Promise<PairingListResponse> {
+  return apiRequest<PairingListResponse>(`/pairing?channel=${channel}`);
+}
+
+export interface ApprovePairingResponse {
+  success: boolean;
+  channel: string;
+  code: string;
+  message?: string;
+  stdout?: string;
+  stderr?: string;
+  error?: string;
+}
+
+export async function approvePairingByCode(channel: 'telegram' | 'whatsapp', code: string): Promise<ApprovePairingResponse> {
+  return apiRequest<ApprovePairingResponse>('/pairing/approve', {
+    method: 'POST',
+    body: JSON.stringify({ channel, code: code.trim().toUpperCase() }),
   });
 }

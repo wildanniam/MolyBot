@@ -3,6 +3,7 @@ import {
   listDevices,
   approveDevice,
   approveAllDevices,
+  approvePairingByCode,
   restartGateway,
   getStorageStatus,
   triggerSync,
@@ -28,6 +29,10 @@ export default function AdminPage() {
   const [actionInProgress, setActionInProgress] = useState<string | null>(null)
   const [restartInProgress, setRestartInProgress] = useState(false)
   const [syncInProgress, setSyncInProgress] = useState(false)
+  const [pairingCode, setPairingCode] = useState('')
+  const [pairingChannel, setPairingChannel] = useState<'telegram' | 'whatsapp'>('telegram')
+  const [pairingInProgress, setPairingInProgress] = useState(false)
+  const [pairingMessage, setPairingMessage] = useState<string | null>(null)
 
   const fetchDevices = useCallback(async () => {
     try {
@@ -121,6 +126,31 @@ export default function AdminPage() {
       setError(err instanceof Error ? err.message : 'Failed to restart gateway')
     } finally {
       setRestartInProgress(false)
+    }
+  }
+
+  const handleApprovePairingByCode = async () => {
+    const code = pairingCode.trim().toUpperCase()
+    if (!code) {
+      setPairingMessage('Enter the 8-character pairing code from the bot message.')
+      return
+    }
+    setPairingInProgress(true)
+    setPairingMessage(null)
+    try {
+      const result = await approvePairingByCode(pairingChannel, code)
+      if (result.success) {
+        setPairingMessage('Pairing approved. You can chat with the bot now.')
+        setPairingCode('')
+      } else {
+        // Show CLI stderr first so user sees real reason (e.g. "code expired", "not found")
+        const errDetail = (result.stderr || '').trim() || result.message || 'Approval failed.'
+        setPairingMessage(errDetail + '\n\nJika kode kedaluwarsa, kirim pesan baru ke bot untuk dapat kode baru (berlaku ~1 jam).')
+      }
+    } catch (err) {
+      setPairingMessage(err instanceof Error ? err.message : 'Failed to approve pairing')
+    } finally {
+      setPairingInProgress(false)
     }
   }
 
@@ -265,7 +295,7 @@ export default function AdminPage() {
 
         {pending.length === 0 ? (
           <div className="empty-state">
-            <p>No pending pairing requests</p>
+            <p>No pending pairing requests (Control UI / browser)</p>
             <p className="hint">
               Devices will appear here when they attempt to connect without being paired.
             </p>
@@ -331,6 +361,46 @@ export default function AdminPage() {
               </div>
             ))}
           </div>
+        )}
+      </section>
+
+      <section className="devices-section pairing-by-code-section">
+        <div className="section-header">
+          <h2>Channel pairing (Telegram / WhatsApp)</h2>
+        </div>
+        <p className="hint">
+          If the bot sent you a <strong>pairing code</strong> (e.g. <code>3898T8EK</code>), paste it below and click Approve.
+        </p>
+        <div className="pairing-form">
+          <select
+            value={pairingChannel}
+            onChange={(e) => setPairingChannel(e.target.value as 'telegram' | 'whatsapp')}
+            className="pairing-channel-select"
+          >
+            <option value="telegram">Telegram</option>
+            <option value="whatsapp">WhatsApp</option>
+          </select>
+          <input
+            type="text"
+            placeholder="Pairing code (e.g. 3898T8EK)"
+            value={pairingCode}
+            onChange={(e) => setPairingCode(e.target.value.replace(/\s/g, '').slice(0, 8))}
+            className="pairing-code-input"
+            maxLength={8}
+          />
+          <button
+            className="btn btn-success"
+            onClick={handleApprovePairingByCode}
+            disabled={pairingInProgress || !pairingCode.trim()}
+          >
+            {pairingInProgress && <ButtonSpinner />}
+            {pairingInProgress ? 'Approving...' : 'Approve'}
+          </button>
+        </div>
+        {pairingMessage && (
+          <p className={pairingMessage.startsWith('Pairing approved') ? 'pairing-success' : 'pairing-error'}>
+            {pairingMessage}
+          </p>
         )}
       </section>
 

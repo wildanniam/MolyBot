@@ -278,6 +278,81 @@ adminApi.post('/gateway/restart', async (c) => {
   }
 });
 
+// GET /api/admin/pairing - List pending channel pairing requests (Telegram, WhatsApp)
+// Uses "clawdbot pairing list <channel>" - channel pairing is separate from "devices" (Control UI)
+adminApi.get('/pairing', async (c) => {
+  const sandbox = c.get('sandbox');
+  const channel = c.req.query('channel') || 'telegram';
+
+  if (!['telegram', 'whatsapp'].includes(channel)) {
+    return c.json({ error: 'channel must be telegram or whatsapp' }, 400);
+  }
+
+  try {
+    await ensureMoltbotGateway(sandbox, c.env);
+    // pairing subcommand does not support --url; CLI uses config/gateway from same container
+    const proc = await sandbox.startProcess(`clawdbot pairing list ${channel}`);
+    await waitForProcess(proc, CLI_TIMEOUT_MS);
+
+    const logs = await proc.getLogs();
+    const stdout = logs.stdout || '';
+    const stderr = logs.stderr || '';
+
+    return c.json({ channel, raw: stdout, stderr });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ error: errorMessage }, 500);
+  }
+});
+
+// POST /api/admin/pairing/approve - Approve a channel pairing by code (e.g. from Telegram bot message)
+// Body: { channel: 'telegram', code: '3898T8EK' }
+adminApi.post('/pairing/approve', async (c) => {
+  const sandbox = c.get('sandbox');
+
+  let body: { channel?: string; code?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'JSON body required: { channel, code }' }, 400);
+  }
+
+  const channel = body.channel || 'telegram';
+  const code = (body.code || '').trim().toUpperCase();
+
+  if (!['telegram', 'whatsapp'].includes(channel)) {
+    return c.json({ error: 'channel must be telegram or whatsapp' }, 400);
+  }
+  if (!code) {
+    return c.json({ error: 'code is required (e.g. the 8-character pairing code from the bot)' }, 400);
+  }
+
+  try {
+    await ensureMoltbotGateway(sandbox, c.env);
+    // pairing subcommand does not support --url; CLI uses config/gateway from same container
+    const proc = await sandbox.startProcess(`clawdbot pairing approve ${channel} ${code}`);
+    await waitForProcess(proc, CLI_TIMEOUT_MS);
+
+    const logs = await proc.getLogs();
+    const stdout = logs.stdout || '';
+    const stderr = logs.stderr || '';
+
+    const success = stdout.toLowerCase().includes('approved') || proc.exitCode === 0;
+
+    return c.json({
+      success,
+      channel,
+      code,
+      message: success ? 'Pairing approved' : (stderr.trim() || 'Approval may have failed'),
+      stdout,
+      stderr,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ error: errorMessage }, 500);
+  }
+});
+
 // Mount admin API routes under /admin
 api.route('/admin', adminApi);
 

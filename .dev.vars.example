@@ -37,6 +37,7 @@ MOLTBOT_GATEWAY_TOKEN=dev-token-change-in-prod
 
 # Optional chat channels
 # TELEGRAM_BOT_TOKEN=optional
+# BRAVE_API_KEY=optional (Brave Search API - for web_search + brave-search skill)
 # DISCORD_BOT_TOKEN=optional
 
 # CDP (Chrome DevTools Protocol) configuration for browser automation
