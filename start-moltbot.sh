@@ -402,11 +402,11 @@ if (isZAI) {
 }
 
 // Brave Search: enables built-in web_search tool + brave-search skill (key from env BRAVE_API_KEY only)
+// Schema per docs.molt.bot/brave-search: only provider, apiKey, maxResults, timeoutSeconds (no "enabled" - causes Config invalid)
 if (process.env.BRAVE_API_KEY) {
     config.tools = config.tools || {};
     config.tools.web = config.tools.web || {};
     config.tools.web.search = {
-        enabled: true,
         provider: 'brave',
         maxResults: 5,
         timeoutSeconds: 30

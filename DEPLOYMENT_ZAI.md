@@ -526,6 +526,27 @@ CLI jalan di container yang sama dengan gateway; CLI baca config dari `/root/.cl
 
 ---
 
+### Issue 10: Bot tidak merespons setelah deploy Brave Search
+
+**Gejala:**  
+Setelah menambah Brave Search API key dan deploy, bot sempat jawab sekali lalu berhenti merespons (pesan `/status`, `halo`, dll. tidak dapat balasan).
+
+**Root cause:**  
+Config Moltbot untuk `tools.web.search` **hanya mendukung** key: `provider`, `apiKey`, `maxResults`, `timeoutSeconds` ([docs](https://docs.molt.bot/brave-search)). Script sempat menulis **`enabled: true`** — key itu **tidak ada di schema**. Validasi config gagal → gateway tidak start / crash → bot tidak bisa chat.
+
+**Solusi:**  
+Hapus `enabled: true` dari blok Brave Search di `start-moltbot.sh`. Hanya set:
+- `provider: 'brave'`
+- `maxResults`, `timeoutSeconds`
+- API key dari env `BRAVE_API_KEY` (jangan simpan di config agar tidak ikut R2 backup).
+
+Setelah fix: bump `BUILD_VERSION` di Dockerfile, deploy ulang, lalu **restart gateway** dari Admin UI.
+
+**Pencegahan:**  
+Saat menambah tool/channel baru, cek schema di docs.molt.bot; jangan tambah key yang tidak didokumentasikan.
+
+---
+
 ## 📋 Checklist Deployment Anti-Gagal
 
 Untuk mencegah masalah di atas, ikuti checklist ini setiap deploy perubahan besar:
@@ -536,6 +557,7 @@ Untuk mencegah masalah di atas, ikuti checklist ini setiap deploy perubahan besa
 - [ ] **Deploy gagal/stuck?** → `docker builder prune -af` + `npm run deploy` ulang.
 - [ ] **Bot tidak jawab meskipun kode fix?** → Cek R2: `wrangler r2 object list moltbot-data --remote`; hapus `.last-sync` + `clawdbot/clawdbot.json` kalau perlu fresh start.
 - [ ] **Channel baru (Telegram/Discord)?** → Set token + deploy + **restart gateway** + approve pairing di Admin UI.
+- [ ] **Brave Search / tools baru?** → Hanya pakai key yang ada di [docs.molt.bot](https://docs.molt.bot/brave-search) (no `enabled`); deploy + restart gateway.
 - [ ] **Test ulang setelah fix?** → Restart gateway + hard refresh browser (`Cmd+Shift+R`) + kirim pesan test di channel.
 
 ---
